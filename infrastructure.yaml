@@ -151,5 +151,3 @@
         name: slashsourcegraph
         value: '{{ ip.stdout }}'
         type: A
-
-    #- shell: infocmp xterm-kitty | ssh root@{{ ip.stdout }} tic -x -o \~/.terminfo /dev/stdin
