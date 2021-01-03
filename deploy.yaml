@@ -16,9 +16,9 @@
       template: 
         src: ./.deploy/slashsourcegraph.service
         dest: /etc/systemd/system/slashsourcegraph.service
+        mode: '0600'
     - name: Start Server
       systemd: 
         state: started
         name: slashsourcegraph
-        daemon_reload: yes      
-        
+        daemon_reload: yes

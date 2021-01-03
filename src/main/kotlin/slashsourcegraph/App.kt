@@ -26,41 +26,11 @@ import io.ktor.server.engine.*
 import io.ktor.util.*
 import slashsourcegraph.graphql.Query
 import java.net.URL
-import java.util.concurrent.TimeUnit
-import kotlin.system.exitProcess
-
-enum class InteractionType {
-    SKIP,
-    PING,
-    APPLICATION_COMMAND,
-}
-
-enum class InteractionResponseType {
-    SKIP,
-    PONG,
-    ACKNOWLEDGE,
-    CHANNEL_MESSAGE,
-    CHANNEL_MESSAGE_WITH_SOURCE,
-    ACK_WITH_SOURCE,
-}
-
-data class ApplicationCommandInteractionDataOption(val name: String, val value: String?)
-
-data class ApplicationCommandInteractionData(
-    val name: String,
-    val options: Array<ApplicationCommandInteractionDataOption>?
-)
-
-data class Interaction(val type: InteractionType, val data: ApplicationCommandInteractionData, val token: String)
-
-data class InteractionApplicationCommandCallbackData(val content: String)
-
-data class InteractionResponse(val type: InteractionResponseType, val data: InteractionApplicationCommandCallbackData?)
 
 @KtorExperimentalAPI
 fun main() {
-    val applicationID = ""
-    val token = ""
+    val applicationID = checkNotNull(System.getProperty("application_id")) { "application_id property not set" }
+    val bearerToken = checkNotNull(System.getProperty("bearer_token")) { "bearer_token property not set" }
 
     // because it falls over when it sees __typename ...
     val objectMapper = jacksonObjectMapper()
@@ -71,64 +41,68 @@ fun main() {
     val gson = GsonBuilder().apply { this.interactionTypeAdapters() }.create()
 
     embeddedServer(CIO, port = 8080) {
-        install(ContentNegotiation) {
-            gson(block = GsonBuilder::interactionTypeAdapters)
-        }
-        install(CallLogging)
-        routing {
-            post("/") {
-                val interaction = call.receive<Interaction>()
-                println(interaction)
-                when(interaction.type) {
-                    InteractionType.PING -> {
-                        call.respondText {
-                            gson.toJson(InteractionResponse(InteractionResponseType.PONG, null))
-                        }
-                    }
-                    InteractionType.APPLICATION_COMMAND -> {
-                        call.respondText {
-                            gson.toJson(InteractionResponse(InteractionResponseType.ACK_WITH_SOURCE, null))
-                        }
-
-                        querySourcegraph(graphqlClient, interaction.data.options!![0].value!!, applicationID, token, interaction.token)
-                    }
-                    else -> {}
-                }
-            }
-        }
+        main(gson, graphqlClient, applicationID, bearerToken)
     }.start(true)
 }
 
-@KtorExperimentalAPI
-suspend fun querySourcegraph(graphqlClient: GraphQLClient, query: String, applicationID: String, bearerToken: String, interactionToken: String) {
-    val resp = Query(graphqlClient).execute(Query.Variables(query))
-    val interactionResponse = mapOf<String, Any>(
-        "embeds" to listOf(formatGraphQLResponse(resp))
-    )
+fun Application.main(gson: Gson, graphqlClient: GraphQLClient, applicationID: String, bearerToken: String) {
+    install(ContentNegotiation) {
+        gson(block = GsonBuilder::interactionTypeAdapters)
+    }
+    install(CallLogging)
+    routing {
+        post("/") {
+            val interaction = call.receive<Interaction>()
+            this@main.log.info("received request: $interaction")
+            when(interaction.type) {
+                InteractionType.PING -> {
+                    call.respond(gson, InteractionResponse(InteractionResponseType.PONG, null))
+                }
+                InteractionType.APPLICATION_COMMAND -> {
+                    call.respond(gson, InteractionResponse(InteractionResponseType.ACK_WITH_SOURCE, null))
 
-    println(Gson().toJson(interactionResponse))
+                    val graphqlResponse = querySourcegraph(graphqlClient, interaction.data.options!![0].value!!)
+
+                    followUpDiscord(graphqlResponse, applicationID, bearerToken, interaction.token)
+                }
+                else -> {}
+            }
+        }
+    }
+}
+
+suspend fun Application.querySourcegraph(graphqlClient: GraphQLClient, query: String): GraphQLResponse<Query.Result> {
+    val resp = Query(graphqlClient).execute(Query.Variables(query))
+
+    this.log.info("graphql response: data=${resp.data?.search?.results?.results?.size} errors=${resp.errors?.size}")
+
+    return resp
+}
+
+suspend fun Application.followUpDiscord(
+    graphQLResponse: GraphQLResponse<Query.Result>,
+    applicationID: String,
+    bearerToken: String,
+    interactionToken: String
+) {
+    val interactionResponse = mapOf<String, Any>(
+        "embeds" to listOf(formatGraphQLResponse(graphQLResponse))
+    )
 
     HttpClient {
         install(HttpTimeout)
-        expectSuccess = false
     }.use {
         val response: String = it.post("https://discord.com/api/v8/webhooks/${applicationID}/${interactionToken}") {
             headers.append("Authorization", "Bearer $bearerToken")
             contentType(ContentType.Application.Json)
-            timeout {
-                this.connectTimeoutMillis = 1500
-                this.requestTimeoutMillis = 5000
-                this.socketTimeoutMillis = 5000
-            }
             body = Gson().toJson(interactionResponse)
         }
-        println("response $response")
+        this.log.info("discord response: $response")
     }
 }
 
 fun formatGraphQLResponse(resp: GraphQLResponse<Query.Result>): Embed {
     val fields = resp.data?.search?.results?.results
-        //?.groupBy { (it as Query.FileMatch).repository.url }
         ?.mapNotNull {
             if(it !is Query.FileMatch) return@mapNotNull null
             val lines = it.file.content.split("\n")
@@ -171,6 +145,11 @@ class EnumSerializer<T: Enum<T>>(private val clazz: Class<T>): TypeAdapter<T>() 
         }
         out.value(value.ordinal)
     }
+}
+
+suspend fun ApplicationCall.respond(gson: Gson, response: InteractionResponse) {
+    this.application.log.info("sending response: $response")
+    this.respondText(gson.toJson(response))
 }
 
 fun GsonBuilder.interactionTypeAdapters() = apply {

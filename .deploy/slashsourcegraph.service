@@ -2,7 +2,7 @@
 Description=Server for Slash Sourcegraph project
 
 [Service]
-ExecStart=/usr/bin/java -jar /root/slash-sourcegraph.jar
+ExecStart=/usr/bin/java -Dbearer_token={{ token }} -Dapplication_id={{ application_id }} -jar /root/slash-sourcegraph.jar
 SuccessExitStatus=143
 
 [Install]

@@ -104,9 +104,11 @@
       template: 
         src: '{{ item.src }}'
         dest: '{{ item.dest }}'
+        mode: '0600'
+        owner: '{{ item.owner }}'
       loop:
-        - { "src": "./.deploy/caddy.service", "dest": "/etc/systemd/system/caddy.service" }
-        - { "src": "./.deploy/Caddyfile", "dest": "/etc/caddy/Caddyfile" }
+        - { "src": "./.deploy/caddy.service", "dest": "/etc/systemd/system/caddy.service", "owner": "root" }
+        - { "src": "./.deploy/Caddyfile", "dest": "/etc/caddy/Caddyfile", "owner": "caddy" }
     - name: Start Caddy
       systemd: 
         state: started

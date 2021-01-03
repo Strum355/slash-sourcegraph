@@ -51,7 +51,9 @@ dependencies {
     implementation("io.ktor:ktor-serialization:$ktorVersion")
     implementation("io.ktor:ktor-client-core:$ktorVersion")
 
-    implementation("org.slf4j:slf4j-simple:1.7.26")
+    //implementation("org.slf4j:slf4j-simple:1.7.26")
+    implementation("ch.qos.logback:logback-classic:1.2.3")
+    implementation("org.apache.logging.log4j:log4j-core:2.12.1")
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.11.+")
 
