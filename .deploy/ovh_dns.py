@@ -108,8 +108,6 @@ def get_credentials():
         {'method': 'DELETE', 'path': '/domain/*'},
     ]
     validation = client.request_consumerkey(access_rules)
-    # print("Your consumer key is {}".format(validation['consumerKey']))
-    # print("Please visit {} to validate".format(validation['validationUrl']))
     return validation['consumerKey']
 
 
@@ -261,20 +259,6 @@ def main():
                     module.fail_json(msg='Old record not match, use append ?')
 
             if oldrecords:
-                # FIXME: check if all records as same fieldType not A/AAAA and CNAME
-                # if fieldtype in ['A', 'AAAA', 'CNAME']:
-                #     oldA = count_type(records)
-                #     oldC = count_type(records, 'CNAME')
-                #     newA = count_type(oldrecords)
-                #     newC = count_type(oldrecords, 'CNAME')
-                #     check = True
-                #     if oldA > 0 and newC > 0 and oldA != newC:
-                #         check = False
-                #     if oldC > 0 and newA > 0 and oldC != newA:
-                #         check = False
-                #     if not check:
-                #         module.fail_json(msg='The subdomain already uses a DNS record.  You can not register a {} field because of an incompatibility.'.format(fieldType))
-
                 # Delete all records and re-create the record
                 if not module.check_mode:
                     for id in oldrecords:

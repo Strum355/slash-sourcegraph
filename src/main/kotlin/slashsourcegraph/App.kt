@@ -38,7 +38,7 @@ fun main() {
 
     val graphqlClient = GraphQLKtorClient(URL("https://sourcegraph.com/.api/graphql"), mapper = objectMapper)
 
-    val gson = GsonBuilder().apply { this.interactionTypeAdapters() }.create()
+    val gson = GsonBuilder().interactionTypeAdapters().create()
 
     embeddedServer(CIO, port = 8080) {
         main(gson, graphqlClient, applicationID, bearerToken)
@@ -50,10 +50,13 @@ fun Application.main(gson: Gson, graphqlClient: GraphQLClient, applicationID: St
         gson(block = GsonBuilder::interactionTypeAdapters)
     }
     install(CallLogging)
+
     routing {
         post("/") {
             val interaction = call.receive<Interaction>()
+
             this@main.log.info("received request: $interaction")
+
             when(interaction.type) {
                 InteractionType.PING -> {
                     call.respond(gson, InteractionResponse(InteractionResponseType.PONG, null))
@@ -91,14 +94,13 @@ suspend fun Application.followUpDiscord(
         "embeds" to listOf(formatGraphQLResponse(graphQLResponse))
     )
 
-    HttpClient {
-        install(HttpTimeout)
-    }.use {
+    HttpClient().use {
         val response: String = it.post("https://discord.com/api/v8/webhooks/${applicationID}/${interactionToken}") {
             headers.append("Authorization", "Bearer $bearerToken")
             contentType(ContentType.Application.Json)
             body = Gson().toJson(interactionResponse)
         }
+
         this.log.info("discord response: $response")
     }
 }
@@ -109,7 +111,9 @@ fun formatGraphQLResponse(resp: GraphQLResponse<Query.Result>): Embed {
             if(it !is Query.FileMatch) return@mapNotNull null
             val lines = it.file.content.split("\n")
             return@mapNotNull EmbedField(
+                // repo+filepath and link to the file on Sourcegraph
                 "${it.repository.name}/${it.file.path} https://sourcegraph.com${it.file.url}",
+
                 it.lineMatches.foldIndexed("```go\n") { i, s, l ->
                     s + (if(i != 0) "\n...\n" else "") +
                         lines.subList(l.lineNumber - 1, l.lineNumber + 2).mapIndexed { i1, line ->
@@ -127,7 +131,7 @@ class EnumSerializer<T: Enum<T>>(private val clazz: Class<T>): TypeAdapter<T>() 
     }
 
     override fun read(input: JsonReader): T? {
-        if (input.peek() === JsonToken.NULL) {
+        if (input.peek() == JsonToken.NULL) {
             input.nextNull()
             return null
         }
