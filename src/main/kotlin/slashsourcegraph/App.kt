@@ -61,7 +61,9 @@ fun Application.main(gson: Gson, graphqlClient: GraphQLClient, applicationID: St
                 InteractionType.APPLICATION_COMMAND -> {
                     call.respond(gson, InteractionResponse(InteractionResponseType.ACK_WITH_SOURCE, null))
 
-                    val graphqlResponse = querySourcegraph(graphqlClient, interaction.data.options!![0].value!!)
+                    val query = searchQueryGenerators[interaction.data.name]?.invoke(interaction.data.options) ?: return@post
+
+                    val graphqlResponse = querySourcegraph(graphqlClient, query)
 
                     followUpDiscord(graphqlResponse, applicationID, bearerToken, interaction.token)
                 }

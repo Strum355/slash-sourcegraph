@@ -8,6 +8,8 @@
       shell: ./gradlew fatJar
 - name: Deploy Server
   hosts: all
+  vars_files:
+    - secrets.yaml
   tasks:
     - copy:
         src: ./build/libs/slash-sourcegraph.jar
