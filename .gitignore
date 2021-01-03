@@ -1,0 +1,8 @@
+build/
+.gradle
+.idea
+.terraform
+terraform.tfvars
+tfplan
+*.backup
+.terraform.lock*

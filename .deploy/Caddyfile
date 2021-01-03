@@ -1,0 +1,6 @@
+slashsourcegraph.noahsc.xyz
+
+route / {
+  discord {{ public_key }}
+  reverse_proxy localhost:8080
+}

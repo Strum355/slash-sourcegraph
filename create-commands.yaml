@@ -1,0 +1,62 @@
+---
+- name: Upsert commands
+  hosts: localhost
+  connection: local
+  vars_files:
+    - secrets.yaml
+  tasks:
+    - uri:
+        url: https://discord.com/api/v8/applications/{{ application_id }}/commands
+        headers:
+          Authorization: Bearer {{ token }}
+        body_format: json
+        body: "{{ item }}"
+        status_code: [200, 201]
+        method: POST
+      loop: [
+          {
+            "name": "search",
+            "description": "Performs a search with the provided options.",
+            "options": [
+              {
+                "type": 3,
+                "name": "content",
+                "description": "The text to search for.",
+                "required": true
+              },
+              {
+                "type": 3,
+                "name": "repo",
+                "description": "Only include results from repos who match the regexp. Only one can be specified, else use raw query."
+              },
+              {
+                "type": 3,
+                "name": "rev",
+                "description": "Search a revision instead of the default branch. 'rev' can only be used in conjunction with 'repo'."
+              },
+              {
+                "type": 3,
+                "name": "pattern-type",
+                "description": "Configure your query to be interpreted literally, regexp, or structural pattern. Default is literal.",
+                "choices": [{"name": "Literal", "value": "literal"}, {"name": "Regular Expression", "value": "regexp"}, {"name": "Structural", "value": "structural"}]
+              },
+              {
+                "type": 3,
+                "name": "language",
+                "description": "Only include results from files in the specified programming language."
+              }
+            ]
+          },
+          {
+            "name": "raw-search",
+            "description": "Performs a search from a raw search string, as from a Sourcegraph installation.",
+            "options": [
+              {
+                "type": 3,
+                "name": "query",
+                "description": "The raw query to perform.",
+                "required": true
+              }
+            ]
+          }
+        ]

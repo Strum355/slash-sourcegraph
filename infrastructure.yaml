@@ -1,0 +1,155 @@
+---
+- name: Deploy Infra
+  hosts: localhost
+  connection: local
+  tags: infra
+  vars_files:
+    - secrets.yaml
+  tasks:
+    - name: Generate tfvars from vault
+      template:
+        src: terraform.tfvars.tpl
+        dest: terraform.tfvars
+        mode: '0600'
+    - name: Plan changes
+      register: result
+      community.general.terraform:
+        state: planned
+        plan_file: tfplan
+        variables_files: terraform.tfvars
+        force_init: yes
+        project_path: ./
+    - debug: var=result.stdout
+    - pause:
+        prompt: Confirm? (y/n)
+      register: confirmed
+      when: '"No changes. Infrastructure is up-to-date." not in result.stdout'
+    - name: Apply changes
+      community.general.terraform:
+        state: present
+        plan_file: tfplan
+        variables_files: terraform.tfvars
+        project_path: ./
+      when: '"No changes. Infrastructure is up-to-date." not in result.stdout and confirmed.user_input == "y"'
+    - file:
+        path: terraform.tfvars
+        state: absent
+- name: Provision Infra
+  hosts: main
+  tags: provision
+  gather_facts: no
+  vars_files:
+    - secrets.yaml
+  environment:
+    GOPATH: /root/go
+    PATH: /root/go/bin:{{ ansible_env.PATH }}
+  pre_tasks:
+    - local_action: shell cat hosts | awk '{ print $2 }' | sed 's/ansible_host=//'
+      register:  ip
+    - name: Check SSH known_hosts for {{ ip.stdout }}
+      local_action: shell ssh-keygen -F {{ ip.stdout }}
+      register: host_entry
+      failed_when: false
+      changed_when: false
+      ignore_errors: yes
+    - name: Add {{ ip.stdout }} to SSH known hosts automatically
+      when: host_entry.rc == 1
+      changed_when: host_entry.rc == 1
+      set_fact:
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    - name: Wait for SSH to respond on all hosts
+      local_action: wait_for port=22 timeout=120 host={{ ip.stdout }}
+    - name: Refresh inventory to ensure new instances exist in inventory
+      meta: refresh_inventory
+    - name: Gathering facts
+      setup:
+  tasks:
+    - name: Install Go
+      apt:
+        name: golang-go
+    - lineinfile:
+        regex: "export GOPATH"
+        line: "export GOPATH=$GOPATH"
+        path: /root/.bashrc
+    - lineinfile:
+        regex: "PATH:$GOPATH/bin"
+        line: "export PATH=$PATH:$GOPATH/bin"
+        path: /root/.bashrc
+    - name: Install xcaddy
+      command: go get -u -v github.com/caddyserver/xcaddy/cmd/xcaddy
+    - name: Run xcaddy
+      shell: xcaddy build --output /usr/local/bin/caddy --with github.com/CarsonHoffman/caddy-discord-interactions-verifier
+    - name: Create caddy user
+      user:
+        name: caddy
+        shell: /sbin/nologin
+        system: yes
+        home: /etc/caddy
+        password: '!'
+    - name: Create caddy folders
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: caddy
+        mode: '0700'
+      loop:
+        - /etc/caddy/.config
+        - /etc/caddy/.local
+        - /var/log/caddy
+    - name: Set caddy capabilities
+      capabilities:
+        path: /usr/local/bin/caddy
+        capability: cap_net_bind_service+ep
+    - name: Install Caddy files
+      template: 
+        src: '{{ item.src }}'
+        dest: '{{ item.dest }}'
+      loop:
+        - { "src": "./.deploy/caddy.service", "dest": "/etc/systemd/system/caddy.service" }
+        - { "src": "./.deploy/Caddyfile", "dest": "/etc/caddy/Caddyfile" }
+    - name: Start Caddy
+      systemd: 
+        state: started
+        name: caddy 
+        daemon_reload: yes
+    - name: Add AdoptOpenJDK key
+      apt_key:
+        url: https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public
+    - name: Add Java OpenJ9 repository
+      apt_repository:
+        repo: deb https://adoptopenjdk.jfrog.io/adoptopenjdk/deb groovy main
+    - name: Install Java OpenJ9
+      apt:
+        name: adoptopenjdk-14-openj9
+        install_recommends: no
+- name: Push Kitty terminal support :)
+  hosts: localhost
+  connection: local
+  tags: provision
+  tasks:
+    - shell: cat hosts | awk '{ print $2 }' | sed 's/ansible_host=//'
+      register:  ip
+    - shell: infocmp xterm-kitty | ssh root@{{ ip.stdout }} tic -x -o \~/.terminfo /dev/stdin
+- name: Update OVH DNS
+  hosts: localhost
+  connection: local
+  tags: dns
+  vars_files:
+    - secrets.yaml
+  environment:
+    OVH_ENDPOINT: ovh-eu
+    OVH_APPLICATION_KEY: '{{ ovh_app_key }}'
+    OVH_APPLICATION_SECRET: '{{ ovh_app_secret }}'
+    OVH_CONSUMER_KEY: '{{ ovh_consumer_key }}'
+  tasks:
+    - shell: cat hosts | awk '{ print $2 }' | sed 's/ansible_host=//'
+      register:  ip
+    - name: Set DNS
+      ovh_dns:
+        state: present
+        domain: noahsc.xyz
+        name: slashsourcegraph
+        value: '{{ ip.stdout }}'
+        type: A
+
+    #- shell: infocmp xterm-kitty | ssh root@{{ ip.stdout }} tic -x -o \~/.terminfo /dev/stdin

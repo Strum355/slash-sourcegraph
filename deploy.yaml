@@ -1,0 +1,24 @@
+---
+- name: Compile Server
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Build fat JAR
+      delegate_to: localhost
+      shell: ./gradlew fatJar
+- name: Deploy Server
+  hosts: all
+  tasks:
+    - copy:
+        src: ./build/libs/slash-sourcegraph.jar
+        dest: /root/slash-sourcegraph.jar
+    - name: Install service file
+      template: 
+        src: ./.deploy/slashsourcegraph.service
+        dest: /etc/systemd/system/slashsourcegraph.service
+    - name: Start Server
+      systemd: 
+        state: started
+        name: slashsourcegraph
+        daemon_reload: yes      
+        

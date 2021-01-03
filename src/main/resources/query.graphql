@@ -1,0 +1,36 @@
+query ($query: String!, $patternType: SearchPatternType = literal) {
+    search(query: $query, patternType: $patternType) {
+        results {
+            __typename
+            matchCount
+            approximateResultCount
+            results {
+                __typename
+                ... on FileMatch {
+                    __typename
+                    repository {
+                        name
+                        url
+                    }
+                    file {
+                        name
+                        path
+                        url
+                        content
+                    }
+                    lineMatches {
+                        lineNumber
+                    }
+                }
+                ... on CommitSearchResult {
+                    __typename
+                    url
+                }
+                ... on Repository {
+                    __typename
+                    url
+                }
+            }
+        }
+    }
+}
