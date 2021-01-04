@@ -1,7 +1,17 @@
 variable "do_token" {}
+variable "ovh_app_key" {}
+variable "ovh_app_secret" {}
+variable "ovh_consumer_key" {}
 
 provider "digitalocean" {
   token = var.do_token
+}
+
+provider "ovh" {
+  endpoint           = "ovh-eu"
+  application_key    = var.ovh_app_key
+  application_secret = var.ovh_app_secret
+  consumer_key       = var.ovh_consumer_key
 }
 
 resource "digitalocean_ssh_key" "default" {
@@ -63,4 +73,14 @@ resource "null_resource" "ansible-provision" {
   triggers = {
     always_run = "${timestamp()}"
   }
+}
+
+resource "ovh_domain_zone_record" "slashsourcegraph" {
+    depends_on = [ digitalocean_droplet.main ]
+
+    zone = "noahsc.xyz"
+    subdomain = "slashsourcegraph"
+    fieldtype = "A"
+    ttl = "3600"
+    target = "${digitalocean_droplet.main.ipv4_address}"
 }
